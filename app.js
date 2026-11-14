@@ -1,10 +1,10 @@
 const $=id=>document.getElementById(id);
-let photos=[],current=0,photoHistory=[],historyIndex=-1,rows=4,cols=4,xs=[],ys=[],selected=new Set([0]),done=new Set(),dim=.8;
+let photos=[],current=0,rows=4,cols=4,xs=[],ys=[],selected=new Set([0]),done=new Set(),dim=.8;
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const even=n=>Array.from({length:n-1},(_,i)=>(i+1)/n);
 // Safari on macOS may return an empty or generic MIME type for local files.
 // Check the filename extension as a fallback instead of rejecting those files.
-const IMAGE_EXT=/\\.(jpe?g|png|gif|webp|heic|heif|avif|tiff?|bmp)$/i;
+const IMAGE_EXT=/\.(jpe?g|png|gif|webp|heic|heif|avif|tiff?|bmp)$/i;
 const isImage=f=>!!f && ((typeof f.type==='string' && f.type.toLowerCase().startsWith('image/')) || IMAGE_EXT.test(f.name||''));
 function addPhotos(list){
   const all=Array.from(list||[]);
@@ -58,28 +58,23 @@ function showPhoto(i){
 }
 function openPhoto(i){
   if(!photos.length)return;
-  current=(i+photos.length)%photos.length;
-  photoHistory=[current];
-  historyIndex=0;
-  showPhoto(current);
+  showPhoto(i);
 }
 function navigatePhoto(i){
   if(!photos.length)return;
-  current=(i+photos.length)%photos.length;
-  photoHistory=photoHistory.slice(0,historyIndex+1);
-  photoHistory.push(current);
-  historyIndex=photoHistory.length-1;
-  showPhoto(current);
+  showPhoto((i+photos.length)%photos.length);
 }
-function previousPhoto(){
-  if(historyIndex<=0)return;
-  historyIndex--;
-  showPhoto(photoHistory[historyIndex]);
+function randomPhoto(){
+  if(photos.length<2)return;
+  const candidates=photos.map((_,i)=>i).filter(i=>i!==current);
+  const next=candidates[Math.floor(Math.random()*candidates.length)];
+  navigatePhoto(next);
 }
 function updatePhotoNavigation(){
-  $('previousPhotoBtn').disabled=historyIndex<=0;
-  $('nextPhotoBtn').disabled=photos.length<2;
-  $('randomPhotoBtn').disabled=photos.length<2;
+  const hasAlternatives=photos.length>1;
+  $('previousPhotoBtn').disabled=!hasAlternatives;
+  $('nextPhotoBtn').disabled=!hasAlternatives;
+  $('randomPhotoBtn').disabled=!hasAlternatives;
 }
 function backToGallery(){$('gridScreen').classList.add('hidden');$('galleryScreen').classList.remove('hidden');}
 function rectFor(index){
@@ -142,14 +137,9 @@ $('fileInput').addEventListener('change',e=>{addPhotos(e.target.files);e.target.
 $('folderInput').addEventListener('change',e=>{addPhotos(e.target.files);e.target.value=''});
 $('randomBtn').onclick=()=>{if(photos.length)openPhoto(Math.floor(Math.random()*photos.length))};
 $('backBtn').onclick=backToGallery;
-$('previousPhotoBtn').onclick=previousPhoto;
-$('nextPhotoBtn').onclick=()=>navigatePhoto(current+1);
-$('randomPhotoBtn').onclick=()=>{
-  if(photos.length<2)return;
-  const candidates=photos.map((_,i)=>i).filter(i=>i!==current);
-  const next=candidates[Math.floor(Math.random()*candidates.length)];
-  navigatePhoto(next);
-};
+$('previousPhotoBtn').addEventListener('click',()=>navigatePhoto(current-1));
+$('nextPhotoBtn').addEventListener('click',()=>navigatePhoto(current+1));
+$('randomPhotoBtn').addEventListener('click',randomPhoto);
 $('selectOne').onclick=()=>{selected=new Set([selected.values().next().value??0]);draw()};
 $('applyGrid').onclick=()=>setGrid(+$('cols').value||4,+$('rows').value||4);
 document.querySelectorAll('[data-preset]').forEach(b=>b.onclick=()=>setGrid(+b.dataset.preset,+b.dataset.preset));
