@@ -104,5 +104,22 @@ document.querySelectorAll('[data-preset]').forEach(b=>b.onclick=()=>setGrid(+b.d
 document.querySelectorAll('[data-dim]').forEach(b=>b.onclick=()=>{dim=1-(+b.dataset.dim/100);draw()});
 $('markDone').onclick=()=>{selected.forEach(i=>done.add(i));draw()};
 $('clearDone').onclick=()=>{done.clear();draw()};
+
+// Finder drag-and-drop into the gallery.
+const dropZone=$('dropZone');
+['dragenter','dragover'].forEach(type=>dropZone.addEventListener(type,e=>{
+  e.preventDefault();e.stopPropagation();dropZone.classList.add('dragover');
+}));
+['dragleave','dragend'].forEach(type=>dropZone.addEventListener(type,e=>{
+  e.preventDefault();e.stopPropagation();dropZone.classList.remove('dragover');
+}));
+dropZone.addEventListener('drop',e=>{
+  e.preventDefault();e.stopPropagation();dropZone.classList.remove('dragover');
+  const files=e.dataTransfer?.files;
+  if(files&&files.length)addPhotos(files);
+});
+document.addEventListener('dragover',e=>e.preventDefault());
+document.addEventListener('drop',e=>{if(!dropZone.contains(e.target))e.preventDefault()});
+
 window.addEventListener('resize',draw);
 if('serviceWorker'in navigator&&location.protocol.startsWith('http'))window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
