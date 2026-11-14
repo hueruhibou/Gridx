@@ -32,15 +32,15 @@ footer{color:var(--muted);text-align:center;padding:20px;font-size:12px}
 <main>
 <section id="galleryScreen">
   <div class="toolbar">
-    <label class="primary">写真を追加<input id="fileInput" type="file" accept="image/*" multiple hidden></label>
-    <label class="primary">フォルダーを読み込む<input id="folderInput" type="file" accept="image/*" webkitdirectory directory multiple hidden></label>
+    <label class="primary">写真を追加<input id="fileInput" type="file" accept="image/*,.jpg,.jpeg,.png,.gif,.webp,.heic,.heif,.avif,.svg,.tif,.tiff,.bmp" multiple hidden></label>
+    <label class="primary">フォルダーを読み込む<input id="folderInput" type="file" accept="image/*,.jpg,.jpeg,.png,.gif,.webp,.heic,.heif,.avif,.svg,.tif,.tiff,.bmp" webkitdirectory directory multiple hidden></label>
     <button id="randomBtn">ランダムに開く</button>
     <span class="spacer"></span><span id="photoCount" class="note">0枚</span>
   </div>
   <section class="panel">
     <div class="gallery-head"><b>ギャラリー</b><span class="note">写真を選ぶとグリッド画面に進みます</span></div>
     <div id="galleryGrid" class="gallery-grid"></div>
-    <div id="dropZone" class="drop-note" tabindex="0"><strong>ここに写真をドラッグ＆ドロップ</strong><br><span class="note">Finderから複数の画像をまとめて追加できます。クリックして選ぶこともできます。</span></div><div id="emptyGallery" class="note" style="text-align:center;margin-top:10px">写真を追加すると、ここにギャラリーが表示されます。</div>
+    <div id="dropZone" class="drop-note" tabindex="0"><strong>写真またはフォルダーをドラッグ＆ドロップ</strong><br><span class="note">Finderから画像ファイル・複数画像・フォルダーをここへドロップできます。フォルダー内の画像も読み込みます。</span></div><div id="emptyGallery" class="note" style="text-align:center;margin-top:10px">写真を追加すると、ここにギャラリーが表示されます。</div>
   </section>
 </section>
 
@@ -63,4 +63,4 @@ footer{color:var(--muted);text-align:center;padding:20px;font-size:12px}
 </section>
 </main>
 <footer>写真は外部サーバーへ送信されません。ページを閉じると再読み込みが必要です。</footer>
-<script src="./app.js?v=7" defer></script></body></html>
+<script src="./app.js?v=9" defer></script></body></html>

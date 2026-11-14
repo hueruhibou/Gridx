@@ -44,7 +44,7 @@ async function addPhotos(list){
   for(const file of valid){
     try{
       const url=URL.createObjectURL(file);
-      photos.push({file,url,name:file.webkitRelativePath||file.name});
+      photos.push({file,url,name:file.webkitRelativePath||file.relativePath||file.name});
       added++;
     }catch(err){
       rejected++;
@@ -161,6 +161,85 @@ function draw(){
   $('clearDone').disabled=!done.size;
   document.querySelectorAll('.dim-choice').forEach(b=>b.setAttribute('aria-pressed',String(1-(+b.dataset.dim/100)===dim)));
 }
+
+// Read dropped files and folders.
+// Chromium / Safari commonly expose WebKitEntry; newer browsers may expose
+// the File System Access handle API. Plain files fall back to getAsFile().
+function attachRelativePath(file,path){
+  try{Object.defineProperty(file,'relativePath',{value:path,configurable:true});}
+  catch(err){try{file.relativePath=path;}catch(ignore){}}
+  return file;
+}
+function readFileEntry(entry,path){
+  return new Promise((resolve,reject)=>{
+    entry.file(file=>resolve(attachRelativePath(file,path+file.name)),reject);
+  });
+}
+function readDirectoryEntry(entry,path){
+  return new Promise((resolve,reject)=>{
+    const reader=entry.createReader(),files=[];
+    const readBatch=()=>{
+      reader.readEntries(async entries=>{
+        if(!entries.length){resolve(files);return;}
+        try{
+          for(const child of entries){
+            const found=await readEntry(child,path+entry.name+'/');
+            files.push(...found);
+          }
+          readBatch();
+        }catch(err){reject(err);}
+      },reject);
+    };
+    readBatch();
+  });
+}
+async function readEntry(entry,path=''){
+  if(!entry)return [];
+  if(entry.isFile)return [await readFileEntry(entry,path)];
+  if(entry.isDirectory)return await readDirectoryEntry(entry,path);
+  return [];
+}
+async function readHandle(handle,path=''){
+  if(!handle)return [];
+  if(handle.kind==='file'){
+    const file=await handle.getFile();
+    return [attachRelativePath(file,path+file.name)];
+  }
+  if(handle.kind==='directory'){
+    const files=[];
+    for await (const [name,child] of handle.entries()){
+      files.push(...await readHandle(child,path+name+(child.kind==='directory'?'/':'')));
+    }
+    return files;
+  }
+  return [];
+}
+async function getDroppedFiles(dataTransfer){
+  const items=Array.from(dataTransfer?.items||[]);
+  const files=[];
+  for(const item of items){
+    if(item.kind!=='file')continue;
+    let entry=null;
+    try{if(typeof item.webkitGetAsEntry==='function')entry=item.webkitGetAsEntry();}catch(err){}
+    if(entry){
+      try{files.push(...await readEntry(entry));continue;}catch(err){console.warn('ドロップした項目を読み込めません:',err);}
+    }
+    if(typeof item.getAsFileSystemHandle==='function'){
+      try{
+        const handle=await item.getAsFileSystemHandle();
+        if(handle){files.push(...await readHandle(handle));continue;}
+      }catch(err){console.warn('フォルダーを読み込めません:',err);}
+    }
+    const file=item.getAsFile?.();
+    if(file)files.push(file);
+  }
+  // Some browsers expose only DataTransfer.files for ordinary file drops.
+  if(!files.length){
+    return Array.from(dataTransfer?.files||[]);
+  }
+  return files;
+}
+
 $('fileInput').addEventListener('change',e=>{addPhotos(e.target.files);e.target.value=''});
 $('folderInput').addEventListener('change',e=>{addPhotos(e.target.files);e.target.value=''});
 $('randomBtn').onclick=()=>{if(photos.length)openPhoto(Math.floor(Math.random()*photos.length))};
@@ -183,10 +262,11 @@ const dropZone=$('dropZone');
 ['dragleave','dragend'].forEach(type=>dropZone.addEventListener(type,e=>{
   e.preventDefault();e.stopPropagation();dropZone.classList.remove('dragover');
 }));
-dropZone.addEventListener('drop',e=>{
+dropZone.addEventListener('drop',async e=>{
   e.preventDefault();e.stopPropagation();dropZone.classList.remove('dragover');
-  const files=e.dataTransfer?.files;
-  if(files&&files.length)addPhotos(files);
+  const files=await getDroppedFiles(e.dataTransfer);
+  if(files.length)addPhotos(files);
+  else alert('フォルダーの中身を読み取れませんでした。ブラウザーの「フォルダーを読み込む」ボタンを使ってください。');
 });
 document.addEventListener('dragover',e=>e.preventDefault());
 document.addEventListener('drop',e=>{if(!dropZone.contains(e.target))e.preventDefault()});
