@@ -1,4 +1,4 @@
-const CACHE = 'gridx-app-v2';
+const CACHE = 'gridx-app-v3';
 const FILES = [
   './',
   './index.html',
