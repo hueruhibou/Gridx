@@ -1,7 +1,7 @@
 const $=id=>document.getElementById(id);
 let photos=[],current=0,rows=3,cols=3,xs=[],ys=[],selected=new Set(),done=new Set(),dim=.9,selectionMode=true;
 const DB_NAME='gridx-local-library',DB_VERSION=1,PHOTO_STORE='photos';
-let db=null,displayToken=0,selectedPhotoHashes=new Set();
+let db=null,displayToken=0,selectedPhotoHashes=new Set(),gallerySelectionMode=false,galleryRandomOrder=false,photoFlipped=false;
 
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const even=n=>Array.from({length:n-1},(_,i)=>(i+1)/n);
@@ -182,6 +182,7 @@ async function addPhotos(list){
         name:file.webkitRelativePath||file.relativePath||file.name,
         addedAt:Date.now(),progress:null,saved:false
       };
+      if(galleryRandomOrder)photo.randomRank=Math.random();
       photos.push(photo);
       try{
         if(!db)throw new Error('端末保存を利用できません');
@@ -212,7 +213,8 @@ async function addPhotos(list){
 }
 function renderGallery(){
   const root=$('galleryGrid');root.replaceChildren();
-  photos.forEach((p,i)=>{
+  const galleryPhotos=galleryRandomOrder?[...photos].sort((a,b)=>(a.randomRank||0)-(b.randomRank||0)):[...photos].sort((a,b)=>(a.addedAt||0)-(b.addedAt||0));
+  galleryPhotos.forEach((p)=>{
     const wrap=document.createElement('div');wrap.className='photo-card-wrap';
     const b=document.createElement('button');b.className='photo-card';b.type='button';
     const thumb=document.createElement('div');thumb.className='photo-thumb';
@@ -220,12 +222,13 @@ function renderGallery(){
     thumb.append(im);
     const label=document.createElement('span');label.textContent=p.name.split('/').pop();
     const state=document.createElement('small');state.className='photo-state';state.textContent=p.saved?'端末に保存済み':'一時利用';
-    b.append(thumb,label,state);b.addEventListener('click',()=>openPhoto(i));
-    const check=document.createElement('input');check.type='checkbox';check.className='photo-select';
+    b.append(thumb,label,state);b.addEventListener('click',()=>{if(!gallerySelectionMode)openPhoto(photos.indexOf(p));});
+    const check=document.createElement('input');check.type='checkbox';check.className='photo-select';check.hidden=!gallerySelectionMode;
     check.checked=selectedPhotoHashes.has(p.hash);
     check.setAttribute('aria-label',`${label.textContent}を選択`);
     check.addEventListener('click',e=>e.stopPropagation());
     check.addEventListener('change',()=>{
+      if(!gallerySelectionMode){check.checked=false;return;}
       if(check.checked)selectedPhotoHashes.add(p.hash);
       else selectedPhotoHashes.delete(p.hash);
       updateGalleryActions();
@@ -242,12 +245,18 @@ function updateGalleryActions(){
   const count=selectedPhotoHashes.size;
   const selectedCount=$('selectedPhotoCount');
   if(selectedCount)selectedCount.textContent=`${count}枚選択中`;
-  if($('deleteSelectedBtn'))$('deleteSelectedBtn').disabled=count===0;
-  if($('selectAllBtn'))$('selectAllBtn').disabled=photos.length===0;
+  if($('deleteSelectedBtn'))$('deleteSelectedBtn').disabled=!gallerySelectionMode||count===0;
+  if($('selectAllBtn'))$('selectAllBtn').disabled=!gallerySelectionMode||photos.length===0;
   if($('selectAllBtn'))$('selectAllBtn').textContent=count===photos.length&&photos.length?'選択解除':'すべて選択';
-  if($('deleteAllBtn'))$('deleteAllBtn').disabled=photos.length===0;
+  if($('deleteAllBtn'))$('deleteAllBtn').disabled=!gallerySelectionMode||photos.length===0;
+  if($('gallerySelectionModeBtn')){
+    $('gallerySelectionModeBtn').textContent=`削除選択モード：${gallerySelectionMode?'ON':'OFF'}`;
+    $('gallerySelectionModeBtn').setAttribute('aria-pressed',String(gallerySelectionMode));
+  }
+  if($('galleryOrderBtn'))$('galleryOrderBtn').textContent=`並び順：${galleryRandomOrder?'ランダム':'追加順'}`;
 }
 async function deleteSelectedPhotos(){
+  if(!gallerySelectionMode)return;
   const targets=photos.filter(p=>selectedPhotoHashes.has(p.hash));
   if(!targets.length)return;
   if(!confirm(`選択した${targets.length}枚をGridxの端末内ライブラリから削除しますか？`))return;
@@ -259,7 +268,7 @@ async function deleteSelectedPhotos(){
   renderGallery();
 }
 async function deleteAllPhotos(){
-  if(!photos.length)return;
+  if(!gallerySelectionMode||!photos.length)return;
   if(!confirm(`Gridxに保存されている${photos.length}枚の写真をすべて削除しますか？この操作は元の写真ファイルには影響しません。`))return;
   const hashes=photos.map(p=>p.hash);
   try{await removeSavedRecords(hashes);}
@@ -296,6 +305,9 @@ function updateSelectionMode(){
 }
 function showPhoto(i){
   if(!photos.length)return;
+  photoFlipped=false;
+  $('stage').classList.remove('flipped');
+  updateFlipButton();
   current=((i%photos.length)+photos.length)%photos.length;
   const photo=photos[current],token=++displayToken;
   // Reset photo-specific, temporary selection immediately, not after loading.
@@ -366,6 +378,10 @@ function updatePhotoNavigation(){
   $('randomPhotoBtn').disabled=!hasAlternatives;
 }
 function backToGallery(){$('gridScreen').classList.add('hidden');$('galleryScreen').classList.remove('hidden');}
+function updateFlipButton(){
+  const b=$('flipPhotoBtn');
+  if(b){b.textContent=`水平反転：${photoFlipped?'ON':'OFF'}`;b.setAttribute('aria-pressed',String(photoFlipped));}
+}
 function rectFor(index){
   const r=Math.floor(index/cols),c=index%cols;
   return{x:xs[c],y:ys[r],w:xs[c+1]-xs[c],h:ys[r+1]-ys[r],r,c};
@@ -409,7 +425,7 @@ function draw(){
     const el=document.createElement('div');el.className=axis;el.style[axis==='v'?'left':'top']=value*100+'%';
     el.addEventListener('pointerdown',ev=>{
       ev.preventDefault();const arr=axis==='v'?xs:ys,box=stage.getBoundingClientRect();
-      const move=e=>{const val=axis==='v'?(e.clientX-box.left)/box.width:(e.clientY-box.top)/box.height;arr[index]=clamp(val,arr[index-1]+.025,arr[index+1]-.025);draw()};
+      const move=e=>{const raw=axis==='v'?(e.clientX-box.left)/box.width:(e.clientY-box.top)/box.height;const val=axis==='v'&&photoFlipped?1-raw:raw;arr[index]=clamp(val,arr[index-1]+.025,arr[index+1]-.025);draw()};
       const up=()=>{window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);saveCurrentProgress()};
       window.addEventListener('pointermove',move);window.addEventListener('pointerup',up);
     });lines.append(el);
@@ -510,7 +526,21 @@ async function getDroppedFiles(dataTransfer){
 $('fileInput').addEventListener('change',e=>{addPhotos(e.target.files);e.target.value=''});
 $('folderInput').addEventListener('change',e=>{addPhotos(e.target.files);e.target.value=''});
 $('randomBtn').onclick=()=>{if(photos.length)openPhoto(Math.floor(Math.random()*photos.length))};
+$('gallerySelectionModeBtn').onclick=()=>{
+  gallerySelectionMode=!gallerySelectionMode;
+  if(!gallerySelectionMode)selectedPhotoHashes.clear();
+  renderGallery();
+};
+$('galleryOrderBtn').onclick=()=>{
+  galleryRandomOrder=!galleryRandomOrder;
+  if(galleryRandomOrder){
+    const shuffled=[...photos].sort(()=>Math.random()-.5);
+    shuffled.forEach((photo,index)=>photo.randomRank=index);
+  }
+  renderGallery();
+};
 $('selectAllBtn').onclick=()=>{
+  if(!gallerySelectionMode)return;
   if(photos.length&&selectedPhotoHashes.size===photos.length)selectedPhotoHashes.clear();
   else photos.forEach(p=>selectedPhotoHashes.add(p.hash));
   renderGallery();
@@ -524,6 +554,7 @@ $('selectionModeBtn').onclick=()=>{selectionMode=!selectionMode;updateSelectionM
 $('previousPhotoBtn').addEventListener('click',()=>navigatePhoto(current-1));
 $('nextPhotoBtn').addEventListener('click',()=>navigatePhoto(current+1));
 $('randomPhotoBtn').addEventListener('click',randomPhoto);
+$('flipPhotoBtn').addEventListener('click',()=>{photoFlipped=!photoFlipped;$('stage').classList.toggle('flipped',photoFlipped);updateFlipButton();});
 $('selectOne').onclick=()=>{selected=new Set([selected.values().next().value??0]);draw()};
 $('applyGrid').onclick=()=>setGrid(+$('cols').value||4,+$('rows').value||4);
 document.querySelectorAll('[data-preset]').forEach(b=>b.onclick=()=>setGrid(+b.dataset.preset,+b.dataset.preset));
