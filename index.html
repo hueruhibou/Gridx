@@ -50,17 +50,17 @@ footer{color:var(--muted);text-align:center;padding:20px;font-size:12px}
     <div class="stage-wrap"><div id="stage" class="stage">
       <img id="photo" alt="模写する写真"><div id="dim" class="dim"></div><div id="brightCells" class="bright-cells"></div><div id="cellButtons" class="cell-buttons"></div><div id="lines" class="lines"></div>
     </div></div>
-    <div class="controls" style="margin-top:14px"><b id="selectionCount">1マス選択中</b><span class="note">マスをタップして選択・解除</span><span class="spacer"></span><button id="selectOne">選択を1マスに戻す</button></div>
+    <div class="controls" style="margin-top:14px"><b id="selectionCount">0マス選択中</b><span class="note">マスをタップして選択・解除</span><span class="spacer"></span><button id="selectOne">選択を1マスに戻す</button></div>
   </section>
   <section class="panel">
-    <div class="controls"><b>格子設定</b><label class="field">横（列）<input id="cols" type="number" min="1" max="12" value="4"></label><label class="field">縦（行）<input id="rows" type="number" min="1" max="12" value="4"></label><button id="applyGrid">均等に再配置</button></div>
-    <div class="controls" style="margin-top:12px"><button data-preset="3">3×3</button><button data-preset="4">4×4</button><button data-preset="5">5×5</button><button data-preset="6">6×6</button><button data-preset="8">8×8</button><span class="spacer"></span><span class="note">周囲の明るさ</span><button class="dim-choice" data-dim="10">10%</button><button class="dim-choice" data-dim="20" aria-pressed="true">20%</button><button class="dim-choice" data-dim="30">30%</button></div>
+    <div class="controls"><b>格子設定</b><label class="field">横（列）<input id="cols" type="number" min="1" max="12" value="3"></label><label class="field">縦（行）<input id="rows" type="number" min="1" max="12" value="3"></label><button id="applyGrid">均等に再配置</button></div>
+    <div class="controls" style="margin-top:12px"><button data-preset="3">3×3</button><button data-preset="4">4×4</button><button data-preset="5">5×5</button><button data-preset="6">6×6</button><button data-preset="8">8×8</button><span class="spacer"></span><span class="note">非選択マスの明るさ</span><button class="dim-choice" data-dim="10" aria-pressed="true">10%</button><button class="dim-choice" data-dim="20">20%</button><button class="dim-choice" data-dim="30">30%</button></div>
     <p class="note">グリッドの線はドラッグして動かせます。選択したマスはすべて明るく表示されます。</p>
   </section>
   <section class="panel">
-    <div class="controls"><button id="markDone" class="primary">✓ 選択したマスを完了</button><span id="progressText" class="note">0 / 16 完了</span><div class="progress"><div id="progressBar"></div></div><button id="clearDone">進捗をリセット</button></div>
+    <div class="controls"><button id="markDone" class="primary">✓ 選択したマスを完了</button><span id="progressText" class="note">0 / 9 完了</span><div class="progress"><div id="progressBar"></div></div><button id="clearDone">進捗をリセット</button></div>
   </section>
 </section>
 </main>
 <footer>写真は外部サーバーへ送信されません。ページを閉じると再読み込みが必要です。</footer>
-<script src="./app.js?v=6" defer></script></body></html>
+<script src="./app.js?v=7" defer></script></body></html>

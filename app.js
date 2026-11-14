@@ -1,5 +1,5 @@
 const $=id=>document.getElementById(id);
-let photos=[],current=0,rows=4,cols=4,xs=[],ys=[],selected=new Set([0]),done=new Set(),dim=.8;
+let photos=[],current=0,rows=3,cols=3,xs=[],ys=[],selected=new Set(),done=new Set(),dim=.9;
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const even=n=>Array.from({length:n-1},(_,i)=>(i+1)/n);
 // Safari on macOS may return an empty or generic MIME type for local files.
@@ -49,7 +49,7 @@ function showPhoto(i){
   updatePhotoNavigation();
   const img=$('photo');
   img.onload=()=>{
-    const w=img.naturalWidth,h=img.naturalHeight,cell=Math.min(w,h)/4;
+    const w=img.naturalWidth,h=img.naturalHeight,cell=Math.min(w,h)/3;
     const c=Math.max(1,Math.ceil(w/cell)),r=Math.max(1,Math.ceil(h/cell));
     setGrid(c,r);
   };
@@ -84,7 +84,7 @@ function rectFor(index){
 function setGrid(c,r){
   cols=clamp(c,1,12);rows=clamp(r,1,12);
   xs=[0,...even(cols),1];ys=[0,...even(rows),1];
-  selected=new Set([0]);done.clear();
+  selected=new Set();done.clear();
   $('cols').value=cols;$('rows').value=rows;draw();
 }
 function draw(){
@@ -106,7 +106,7 @@ function draw(){
     b.title=`${r+1}行 ${c+1}列`;
     b.style.background=selected.has(index)?'rgba(169,199,239,.07)':'transparent';
     b.addEventListener('click',()=>{
-      if(selected.has(index)){if(selected.size>1)selected.delete(index);}
+      if(selected.has(index))selected.delete(index);
       else selected.add(index);
       draw();
     });
