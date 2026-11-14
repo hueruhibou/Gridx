@@ -1,5 +1,5 @@
 const $=id=>document.getElementById(id);
-let photos=[],current=0,rows=4,cols=4,xs=[],ys=[],selected=new Set([0]),done=new Set(),dim=.8;
+let photos=[],current=0,photoHistory=[],historyIndex=-1,rows=4,cols=4,xs=[],ys=[],selected=new Set([0]),done=new Set(),dim=.8;
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const even=n=>Array.from({length:n-1},(_,i)=>(i+1)/n);
 // Safari on macOS may return an empty or generic MIME type for local files.
@@ -41,11 +41,12 @@ function renderGallery(){
   $('emptyGallery').classList.toggle('hidden',photos.length>0);
   $('randomBtn').disabled=!photos.length;
 }
-function openPhoto(i){
+function showPhoto(i){
   if(!photos.length)return;
   current=(i+photos.length)%photos.length;
   $('galleryScreen').classList.add('hidden');$('gridScreen').classList.remove('hidden');
   $('currentName').textContent=photos[current].name.split('/').pop();
+  updatePhotoNavigation();
   const img=$('photo');
   img.onload=()=>{
     const w=img.naturalWidth,h=img.naturalHeight,cell=Math.min(w,h)/4;
@@ -54,6 +55,31 @@ function openPhoto(i){
   };
   img.onerror=()=>alert('この画像を開けませんでした。別の写真を選んでください。');
   img.src=photos[current].url;
+}
+function openPhoto(i){
+  if(!photos.length)return;
+  current=(i+photos.length)%photos.length;
+  photoHistory=[current];
+  historyIndex=0;
+  showPhoto(current);
+}
+function navigatePhoto(i){
+  if(!photos.length)return;
+  current=(i+photos.length)%photos.length;
+  photoHistory=photoHistory.slice(0,historyIndex+1);
+  photoHistory.push(current);
+  historyIndex=photoHistory.length-1;
+  showPhoto(current);
+}
+function previousPhoto(){
+  if(historyIndex<=0)return;
+  historyIndex--;
+  showPhoto(photoHistory[historyIndex]);
+}
+function updatePhotoNavigation(){
+  $('previousPhotoBtn').disabled=historyIndex<=0;
+  $('nextPhotoBtn').disabled=photos.length<2;
+  $('randomPhotoBtn').disabled=photos.length<2;
 }
 function backToGallery(){$('gridScreen').classList.add('hidden');$('galleryScreen').classList.remove('hidden');}
 function rectFor(index){
@@ -108,7 +134,7 @@ function draw(){
   $('progressText').textContent=`${completed} / ${total} 完了`;
   $('progressBar').style.width=`${completed/total*100}%`;
   $('markDone').textContent=`✓ 選択した${selected.size}マスを完了`;
-  $('nextPhotoBtn').disabled=photos.length<2;$('randomPhotoBtn').disabled=photos.length<2;
+  updatePhotoNavigation();
   $('clearDone').disabled=!done.size;
   document.querySelectorAll('.dim-choice').forEach(b=>b.setAttribute('aria-pressed',String(1-(+b.dataset.dim/100)===dim)));
 }
@@ -116,12 +142,13 @@ $('fileInput').addEventListener('change',e=>{addPhotos(e.target.files);e.target.
 $('folderInput').addEventListener('change',e=>{addPhotos(e.target.files);e.target.value=''});
 $('randomBtn').onclick=()=>{if(photos.length)openPhoto(Math.floor(Math.random()*photos.length))};
 $('backBtn').onclick=backToGallery;
-$('nextPhotoBtn').onclick=()=>openPhoto(current+1);
+$('previousPhotoBtn').onclick=previousPhoto;
+$('nextPhotoBtn').onclick=()=>navigatePhoto(current+1);
 $('randomPhotoBtn').onclick=()=>{
   if(photos.length<2)return;
-  let next;
-  do{next=Math.floor(Math.random()*photos.length)}while(next===current);
-  openPhoto(next);
+  const candidates=photos.map((_,i)=>i).filter(i=>i!==current);
+  const next=candidates[Math.floor(Math.random()*candidates.length)];
+  navigatePhoto(next);
 };
 $('selectOne').onclick=()=>{selected=new Set([selected.values().next().value??0]);draw()};
 $('applyGrid').onclick=()=>setGrid(+$('cols').value||4,+$('rows').value||4);
