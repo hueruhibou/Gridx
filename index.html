@@ -13,9 +13,9 @@ main{padding:10px 16px 40px}.hidden{display:none!important}.panel{background:var
 .toolbar,.controls{display:flex;gap:9px;align-items:center;flex-wrap:wrap}.toolbar{margin:14px 0}.spacer{flex:1}
 .gallery-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px;margin-top:15px}
 .photo-card{border:1px solid var(--line);background:#181a1e;border-radius:13px;overflow:hidden;text-align:left;padding:0;min-width:0}
-.photo-card img{width:100%;aspect-ratio:1/1;object-fit:cover;display:block}.photo-card span{display:block;padding:8px 9px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#dce0e8}
+.photo-thumb{width:100%;aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#111214}.photo-thumb img{display:block;width:100%;height:100%;object-fit:contain}.photo-card span{display:block;padding:8px 9px 1px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#dce0e8}
 .drop-note{border:1px dashed #687486;border-radius:14px;padding:26px 18px;text-align:center;color:var(--muted);margin-top:14px;transition:background .15s,border-color .15s}.drop-note.dragover{background:#283342;border-color:var(--accent);color:#f3f6fb}
-.stage-wrap{display:flex;justify-content:center;min-height:100px}.stage{position:relative;display:inline-block;max-width:100%;max-height:58vh;line-height:0;user-select:none}.stage>img{display:block;max-width:100%;max-height:58vh;width:auto;height:auto;border-radius:7px}
+.stage-wrap{display:flex;justify-content:center;align-items:flex-start;width:100%;max-width:100%;min-width:0;min-height:100px;overflow:hidden}.stage{position:relative;display:block;flex:0 1 auto;width:max-content;max-width:100%;line-height:0;user-select:none}.stage>img{display:block;width:auto;height:auto;max-width:100%;max-height:none;object-fit:contain;border-radius:7px}
 .dim{position:absolute;inset:0;background:rgba(12,14,18,.8);pointer-events:none}.bright-cells{position:absolute;inset:0;pointer-events:none}.bright-cell{position:absolute;overflow:hidden;outline:2px solid var(--accent);outline-offset:-2px}
 .bright-cell img{position:absolute;max-width:none;max-height:none;border-radius:0}
 .lines{position:absolute;inset:0;pointer-events:none}.v,.h{position:absolute;background:rgba(235,240,248,.34);box-shadow:0 0 1px rgba(0,0,0,.25);touch-action:none;pointer-events:auto}
@@ -38,7 +38,7 @@ footer{color:var(--muted);text-align:center;padding:20px;font-size:12px}
     <span class="spacer"></span><span id="photoCount" class="note">0枚</span>
   </div>
   <section class="panel">
-    <div class="gallery-head"><b>ギャラリー</b><span class="note">写真を選ぶとグリッド画面に進みます</span></div>
+    <div class="gallery-head"><b>ギャラリー</b><span class="note">写真を選ぶとグリッド画面に進みます</span><span class="spacer"></span><span id="selectedPhotoCount" class="note">0枚選択中</span><button id="selectAllBtn">すべて選択</button><button id="deleteSelectedBtn" disabled>選択を削除</button><button id="deleteAllBtn" disabled>全削除</button></div>
     <div id="galleryGrid" class="gallery-grid"></div>
     <div id="dropZone" class="drop-note" tabindex="0"><strong>写真またはフォルダーをドラッグ＆ドロップ</strong><br><span class="note">Finderから画像ファイル・複数画像・フォルダーをここへドロップできます。フォルダー内の画像も読み込みます。</span></div><div id="emptyGallery" class="note" style="text-align:center;margin-top:10px">写真を追加すると、ここにギャラリーが表示されます。</div>
   </section>
@@ -47,7 +47,7 @@ footer{color:var(--muted);text-align:center;padding:20px;font-size:12px}
 <section id="gridScreen" class="hidden">
   <div class="toolbar"><button id="backBtn">← ギャラリー</button><button id="previousPhotoBtn" disabled>← 前の写真</button><span id="currentName" class="note"></span><span class="spacer"></span><button id="randomPhotoBtn">🎲 ランダム</button><button id="nextPhotoBtn">次の写真 →</button></div>
   <section class="panel">
-    <div class="stage-wrap"><div id="stage" class="stage">
+    <div id="stageWrap" class="stage-wrap"><div id="stage" class="stage">
       <img id="photo" alt="模写する写真"><div id="dim" class="dim"></div><div id="brightCells" class="bright-cells"></div><div id="cellButtons" class="cell-buttons"></div><div id="lines" class="lines"></div>
     </div></div>
     <div class="controls" style="margin-top:14px"><b id="selectionCount">0マス選択中</b><span class="note">マスをタップして選択・解除</span><span class="spacer"></span><button id="selectOne">選択を1マスに戻す</button></div>
@@ -63,4 +63,4 @@ footer{color:var(--muted);text-align:center;padding:20px;font-size:12px}
 </section>
 </main>
 <footer>写真は外部サーバーへ送信されません。ページを閉じると再読み込みが必要です。</footer>
-<script src="./app.js?v=10" defer></script></body></html>
+<script src="./app.js?v=12" defer></script></body></html>

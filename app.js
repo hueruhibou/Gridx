@@ -1,7 +1,7 @@
 const $=id=>document.getElementById(id);
 let photos=[],current=0,rows=3,cols=3,xs=[],ys=[],selected=new Set(),done=new Set(),dim=.9;
 const DB_NAME='gridx-local-library',DB_VERSION=1,PHOTO_STORE='photos';
-let db=null,displayToken=0;
+let db=null,displayToken=0,selectedPhotoHashes=new Set();
 
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const even=n=>Array.from({length:n-1},(_,i)=>(i+1)/n);
@@ -48,6 +48,13 @@ async function removeSavedRecord(hash){
   if(!db)return;
   const tx=db.transaction(PHOTO_STORE,'readwrite');
   tx.objectStore(PHOTO_STORE).delete(hash);
+  await transactionDone(tx);
+}
+async function removeSavedRecords(hashes){
+  if(!db)return;
+  const tx=db.transaction(PHOTO_STORE,'readwrite');
+  const store=tx.objectStore(PHOTO_STORE);
+  hashes.forEach(hash=>store.delete(hash));
   await transactionDone(tx);
 }
 async function hashFile(file){
@@ -208,26 +215,59 @@ function renderGallery(){
   photos.forEach((p,i)=>{
     const wrap=document.createElement('div');wrap.className='photo-card-wrap';
     const b=document.createElement('button');b.className='photo-card';b.type='button';
+    const thumb=document.createElement('div');thumb.className='photo-thumb';
     const im=document.createElement('img');im.src=p.url;im.alt=p.name;
+    thumb.append(im);
     const label=document.createElement('span');label.textContent=p.name.split('/').pop();
     const state=document.createElement('small');state.className='photo-state';state.textContent=p.saved?'端末に保存済み':'一時利用';
-    b.append(im,label,state);b.addEventListener('click',()=>openPhoto(i));
-    const remove=document.createElement('button');remove.className='photo-remove';remove.type='button';remove.textContent='削除';
-    remove.setAttribute('aria-label',`${label.textContent}を削除`);
-    remove.addEventListener('click',async e=>{
-      e.preventDefault();e.stopPropagation();
-      if(!confirm(`「${label.textContent}」をGridxの端末内ライブラリから削除しますか？`))return;
-      try{await removeSavedRecord(p.hash);}catch(err){alert('保存データを削除できませんでした。');return;}
-      URL.revokeObjectURL(p.url);
-      photos.splice(i,1);
-      renderGallery();updateStorageInfo();
+    b.append(thumb,label,state);b.addEventListener('click',()=>openPhoto(i));
+    const check=document.createElement('input');check.type='checkbox';check.className='photo-select';
+    check.checked=selectedPhotoHashes.has(p.hash);
+    check.setAttribute('aria-label',`${label.textContent}を選択`);
+    check.addEventListener('click',e=>e.stopPropagation());
+    check.addEventListener('change',()=>{
+      if(check.checked)selectedPhotoHashes.add(p.hash);
+      else selectedPhotoHashes.delete(p.hash);
+      updateGalleryActions();
     });
-    wrap.append(b,remove);root.append(wrap);
+    wrap.append(b,check);root.append(wrap);
   });
   $('photoCount').textContent=`${photos.length}枚`;
   $('emptyGallery').classList.toggle('hidden',photos.length>0);
   $('randomBtn').disabled=!photos.length;
   updateStorageInfo();
+  updateGalleryActions();
+}
+function updateGalleryActions(){
+  const count=selectedPhotoHashes.size;
+  const selectedCount=$('selectedPhotoCount');
+  if(selectedCount)selectedCount.textContent=`${count}枚選択中`;
+  if($('deleteSelectedBtn'))$('deleteSelectedBtn').disabled=count===0;
+  if($('selectAllBtn'))$('selectAllBtn').disabled=photos.length===0;
+  if($('selectAllBtn'))$('selectAllBtn').textContent=count===photos.length&&photos.length?'選択解除':'すべて選択';
+  if($('deleteAllBtn'))$('deleteAllBtn').disabled=photos.length===0;
+}
+async function deleteSelectedPhotos(){
+  const targets=photos.filter(p=>selectedPhotoHashes.has(p.hash));
+  if(!targets.length)return;
+  if(!confirm(`選択した${targets.length}枚をGridxの端末内ライブラリから削除しますか？`))return;
+  try{await removeSavedRecords(targets.map(p=>p.hash));}
+  catch(err){alert('保存データを削除できませんでした。');return;}
+  targets.forEach(p=>URL.revokeObjectURL(p.url));
+  photos=photos.filter(p=>!selectedPhotoHashes.has(p.hash));
+  selectedPhotoHashes.clear();
+  renderGallery();
+}
+async function deleteAllPhotos(){
+  if(!photos.length)return;
+  if(!confirm(`Gridxに保存されている${photos.length}枚の写真をすべて削除しますか？この操作は元の写真ファイルには影響しません。`))return;
+  const hashes=photos.map(p=>p.hash);
+  try{await removeSavedRecords(hashes);}
+  catch(err){alert('保存データを削除できませんでした。');return;}
+  photos.forEach(p=>URL.revokeObjectURL(p.url));
+  photos=[];
+  selectedPhotoHashes.clear();
+  renderGallery();
 }
 function showPhoto(i){
   if(!photos.length)return;
@@ -239,6 +279,7 @@ function showPhoto(i){
   const img=$('photo');
   img.onload=()=>{
     if(token!==displayToken)return;
+    fitPhotoToStage();
     selected=new Set();
     if(validProgress(photo.progress)){
       rows=photo.progress.rows;cols=photo.progress.cols;
@@ -419,6 +460,14 @@ async function getDroppedFiles(dataTransfer){
 $('fileInput').addEventListener('change',e=>{addPhotos(e.target.files);e.target.value=''});
 $('folderInput').addEventListener('change',e=>{addPhotos(e.target.files);e.target.value=''});
 $('randomBtn').onclick=()=>{if(photos.length)openPhoto(Math.floor(Math.random()*photos.length))};
+$('selectAllBtn').onclick=()=>{
+  if(photos.length&&selectedPhotoHashes.size===photos.length)selectedPhotoHashes.clear();
+  else photos.forEach(p=>selectedPhotoHashes.add(p.hash));
+  renderGallery();
+};
+$('deleteSelectedBtn').onclick=deleteSelectedPhotos;
+$('deleteAllBtn').onclick=deleteAllPhotos;
+
 $('backBtn').onclick=backToGallery;
 $('previousPhotoBtn').addEventListener('click',()=>navigatePhoto(current-1));
 $('nextPhotoBtn').addEventListener('click',()=>navigatePhoto(current+1));
@@ -447,5 +496,5 @@ dropZone.addEventListener('drop',async e=>{
 document.addEventListener('dragover',e=>e.preventDefault());
 document.addEventListener('drop',e=>{if(!dropZone.contains(e.target))e.preventDefault()});
 
-window.addEventListener('resize',draw);
+window.addEventListener('resize',()=>{fitPhotoToStage();draw()});
 if('serviceWorker'in navigator&&location.protocol.startsWith('http'))window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
