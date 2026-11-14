@@ -108,7 +108,7 @@ function draw(){
   $('progressText').textContent=`${completed} / ${total} 完了`;
   $('progressBar').style.width=`${completed/total*100}%`;
   $('markDone').textContent=`✓ 選択した${selected.size}マスを完了`;
-  $('nextPhotoBtn').disabled=photos.length<2;
+  $('nextPhotoBtn').disabled=photos.length<2;$('randomPhotoBtn').disabled=photos.length<2;
   $('clearDone').disabled=!done.size;
   document.querySelectorAll('.dim-choice').forEach(b=>b.setAttribute('aria-pressed',String(1-(+b.dataset.dim/100)===dim)));
 }
@@ -117,6 +117,12 @@ $('folderInput').addEventListener('change',e=>{addPhotos(e.target.files);e.targe
 $('randomBtn').onclick=()=>{if(photos.length)openPhoto(Math.floor(Math.random()*photos.length))};
 $('backBtn').onclick=backToGallery;
 $('nextPhotoBtn').onclick=()=>openPhoto(current+1);
+$('randomPhotoBtn').onclick=()=>{
+  if(photos.length<2)return;
+  let next;
+  do{next=Math.floor(Math.random()*photos.length)}while(next===current);
+  openPhoto(next);
+};
 $('selectOne').onclick=()=>{selected=new Set([selected.values().next().value??0]);draw()};
 $('applyGrid').onclick=()=>setGrid(+$('cols').value||4,+$('rows').value||4);
 document.querySelectorAll('[data-preset]').forEach(b=>b.onclick=()=>setGrid(+b.dataset.preset,+b.dataset.preset));
