@@ -8,12 +8,12 @@
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
 button,input{font:inherit}button{border:1px solid var(--line);border-radius:12px;background:#292c32;color:var(--text);padding:10px 13px;cursor:pointer}button:disabled{opacity:.4}
 .primary{background:#e7edf7;color:#151619;font-weight:700;border:0;border-radius:12px;padding:11px 15px;display:inline-flex;align-items:center;cursor:pointer}
-header,main{max-width:1000px;margin:auto}header{padding:22px 18px 10px;display:flex;justify-content:space-between;align-items:center;gap:10px}.brand{font-size:30px;font-weight:750;letter-spacing:-1px}.note{font-size:12px;color:var(--muted);line-height:1.6}
+header,main{max-width:1000px;margin:auto}header{padding:22px 18px 10px;display:flex;justify-content:space-between;align-items:center;gap:10px}.brand{font-size:30px;font-weight:750;letter-spacing:-1px}.brand-home{appearance:none;border:0;background:transparent;color:var(--text);padding:0;margin:0;border-radius:0;font:inherit;font-size:30px;font-weight:750;letter-spacing:-1px;cursor:pointer}.brand-home:hover{color:var(--accent)}.note{font-size:12px;color:var(--muted);line-height:1.6}
 main{padding:10px 16px 40px}.hidden{display:none!important}.panel{background:var(--panel);border:1px solid #343840;border-radius:18px;padding:15px;margin:12px 0}
 .toolbar,.controls{display:flex;gap:9px;align-items:center;flex-wrap:wrap}.toolbar{margin:14px 0}.spacer{flex:1}
-.gallery-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px;margin-top:15px}
-.photo-card{border:1px solid var(--line);background:#181a1e;border-radius:13px;overflow:hidden;text-align:left;padding:0;min-width:0}
-.photo-thumb{width:100%;aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#111214}.photo-thumb img{display:block;width:100%;height:100%;object-fit:contain}.photo-card span{display:block;padding:8px 9px 1px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#dce0e8}
+.gallery-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,130px),1fr));gap:12px;margin-top:15px;min-width:0;width:100%}
+.photo-card-wrap{position:relative;width:100%;min-width:0;max-width:100%}.photo-card{display:block;width:100%;max-width:100%;border:1px solid var(--line);background:#181a1e;border-radius:13px;overflow:hidden;text-align:left;padding:0;min-width:0}
+.photo-thumb{width:100%;aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#111214}.photo-thumb img{display:block;width:100%;height:100%;max-width:100%;object-fit:contain}.photo-card span{display:block;width:100%;min-width:0;padding:8px 9px 1px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#dce0e8}.photo-state{display:block;padding:0 9px 8px;font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.photo-select{position:absolute;top:9px;left:9px;z-index:2;width:22px;height:22px;accent-color:var(--accent);cursor:pointer}
 .drop-note{border:1px dashed #687486;border-radius:14px;padding:26px 18px;text-align:center;color:var(--muted);margin-top:14px;transition:background .15s,border-color .15s}.drop-note.dragover{background:#283342;border-color:var(--accent);color:#f3f6fb}
 .stage-wrap{display:flex;justify-content:center;align-items:flex-start;width:100%;max-width:100%;min-width:0;min-height:100px;overflow:hidden}.stage{position:relative;display:block;flex:0 1 auto;width:max-content;max-width:100%;line-height:0;user-select:none}.stage>img{display:block;width:auto;height:auto;max-width:100%;max-height:none;object-fit:contain;border-radius:7px}
 .dim{position:absolute;inset:0;background:rgba(12,14,18,.8);pointer-events:none}.bright-cells{position:absolute;inset:0;pointer-events:none}.bright-cell{position:absolute;overflow:hidden;outline:2px solid var(--accent);outline-offset:-2px}
@@ -28,7 +28,7 @@ main{padding:10px 16px 40px}.hidden{display:none!important}.panel{background:var
 footer{color:var(--muted);text-align:center;padding:20px;font-size:12px}
 @media(max-width:600px){header{padding-top:calc(14px + env(safe-area-inset-top))}main{padding:8px 12px 30px}.stage,.stage>img{max-height:52vh}.panel{padding:11px}.gallery-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style></head><body>
-<header><div><div class="brand">Gridx</div><div class="note">FOCUSED DRAWING PRACTICE</div></div><div class="note">一マスに集中し、全体を見失わない。</div></header>
+<header><div><button id="homeBtn" class="brand-home" type="button" aria-label="Gridxホームへ戻る">Gridx</button><div class="note">FOCUSED DRAWING PRACTICE</div></div><div class="note">一マスに集中し、全体を見失わない。</div></header>
 <main>
 <section id="galleryScreen">
   <div class="toolbar">
@@ -50,7 +50,7 @@ footer{color:var(--muted);text-align:center;padding:20px;font-size:12px}
     <div id="stageWrap" class="stage-wrap"><div id="stage" class="stage">
       <img id="photo" alt="模写する写真"><div id="dim" class="dim"></div><div id="brightCells" class="bright-cells"></div><div id="cellButtons" class="cell-buttons"></div><div id="lines" class="lines"></div>
     </div></div>
-    <div class="controls" style="margin-top:14px"><b id="selectionCount">0マス選択中</b><span class="note">マスをタップして選択・解除</span><span class="spacer"></span><button id="selectOne">選択を1マスに戻す</button></div>
+    <div class="controls" style="margin-top:14px"><button id="selectionModeBtn" type="button" aria-pressed="true">選択モード：ON</button><b id="selectionCount">0マス選択中</b><span id="selectionHint" class="note">ON：マスをタップして選択・解除</span><span class="spacer"></span><button id="selectOne">選択を1マスに戻す</button></div>
   </section>
   <section class="panel">
     <div class="controls"><b>格子設定</b><label class="field">横（列）<input id="cols" type="number" min="1" max="12" value="3"></label><label class="field">縦（行）<input id="rows" type="number" min="1" max="12" value="3"></label><button id="applyGrid">均等に再配置</button></div>
@@ -63,4 +63,4 @@ footer{color:var(--muted);text-align:center;padding:20px;font-size:12px}
 </section>
 </main>
 <footer>写真は外部サーバーへ送信されません。ページを閉じると再読み込みが必要です。</footer>
-<script src="./app.js?v=12" defer></script></body></html>
+<script src="./app.js?v=14" defer></script></body></html>

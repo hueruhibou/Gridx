@@ -1,5 +1,5 @@
 const $=id=>document.getElementById(id);
-let photos=[],current=0,rows=3,cols=3,xs=[],ys=[],selected=new Set(),done=new Set(),dim=.9;
+let photos=[],current=0,rows=3,cols=3,xs=[],ys=[],selected=new Set(),done=new Set(),dim=.9,selectionMode=true;
 const DB_NAME='gridx-local-library',DB_VERSION=1,PHOTO_STORE='photos';
 let db=null,displayToken=0,selectedPhotoHashes=new Set();
 
@@ -269,34 +269,82 @@ async function deleteAllPhotos(){
   selectedPhotoHashes.clear();
   renderGallery();
 }
+function fitPhotoToStage(){
+  const img=$('photo'),wrap=$('stageWrap'),stage=$('stage');
+  if(!img||!wrap||!stage||!img.naturalWidth||!img.naturalHeight)return;
+  const availableWidth=wrap.clientWidth;
+  if(!availableWidth)return;
+  const mobile=window.matchMedia('(max-width: 600px)').matches;
+  const maxHeight=Math.max(160,window.innerHeight*(mobile?.52:.62));
+  const scale=Math.min(availableWidth/img.naturalWidth,maxHeight/img.naturalHeight,1);
+  const width=Math.max(1,Math.round(img.naturalWidth*scale));
+  const height=Math.max(1,Math.round(img.naturalHeight*scale));
+  img.style.width=`${width}px`;
+  img.style.height=`${height}px`;
+  stage.style.width=`${width}px`;
+  stage.style.height=`${height}px`;
+}
+function updateSelectionMode(){
+  const button=$('selectionModeBtn');
+  if(button){
+    button.textContent=`選択モード：${selectionMode?'ON':'OFF'}`;
+    button.setAttribute('aria-pressed',String(selectionMode));
+  }
+  const hint=$('selectionHint');
+  if(hint)hint.textContent=selectionMode?'ON：マスをタップして選択・解除':'OFF：選択状態を固定（マス操作を停止）';
+  $('cellButtons').style.pointerEvents=selectionMode?'auto':'none';
+}
 function showPhoto(i){
   if(!photos.length)return;
-  current=(i+photos.length)%photos.length;
+  current=((i%photos.length)+photos.length)%photos.length;
   const photo=photos[current],token=++displayToken;
+  // Reset photo-specific, temporary selection immediately, not after loading.
+  selected.clear();
+  done.clear();
+  rows=3;cols=3;xs=[];ys=[];dim=.9;
   $('galleryScreen').classList.add('hidden');$('gridScreen').classList.remove('hidden');
   $('currentName').textContent=photo.name.split('/').pop();
+  $('selectionCount').textContent='0マス選択中';
+  $('progressText').textContent='0 / 9 完了';
+  $('progressBar').style.width='0%';
+  $('stageWrap').style.visibility='hidden';
+  $('brightCells').replaceChildren();$('cellButtons').replaceChildren();$('lines').replaceChildren();
+  $('cols').value=3;$('rows').value=3;
   updatePhotoNavigation();
+  updateSelectionMode();
   const img=$('photo');
-  img.onload=()=>{
-    if(token!==displayToken)return;
-    fitPhotoToStage();
-    selected=new Set();
-    if(validProgress(photo.progress)){
-      rows=photo.progress.rows;cols=photo.progress.cols;
-      xs=[...photo.progress.xs];ys=[...photo.progress.ys];
-      done=new Set((photo.progress.done||[]).filter(n=>Number.isInteger(n)&&n>=0&&n<rows*cols));
-      dim=Number.isFinite(photo.progress.dim)?clamp(photo.progress.dim,.7,.9):.9;
+  const initialize=()=>{
+    if(token!==displayToken||img.src!==photo.url||!img.complete)return;
+    if(!img.naturalWidth||!img.naturalHeight)return;
+    const progress=photo.progress;
+    if(validProgress(progress)){
+      rows=progress.rows;cols=progress.cols;
+      xs=[...progress.xs];ys=[...progress.ys];
+      done=new Set((progress.done||[]).filter(n=>Number.isInteger(n)&&n>=0&&n<rows*cols));
+      dim=Number.isFinite(progress.dim)?clamp(progress.dim,.7,.9):.9;
       $('cols').value=cols;$('rows').value=rows;
-      draw();
     }else{
       const w=img.naturalWidth,h=img.naturalHeight,cell=Math.min(w,h)/3;
       const c=Math.max(1,Math.ceil(w/cell)),r=Math.max(1,Math.ceil(h/cell));
-      setGrid(c,r);
+      cols=clamp(c,1,12);rows=clamp(r,1,12);
+      xs=[0,...even(cols),1];ys=[0,...even(rows),1];
+      $('cols').value=cols;$('rows').value=rows;
     }
+    fitPhotoToStage();
+    $('stageWrap').style.visibility='visible';
+    draw();
+    if(!validProgress(progress))saveCurrentProgress();
   };
-  img.onerror=()=>alert('この画像を開けませんでした。iCloudからダウンロード済みか確認してください。');
-  img.src=photo.url;
+  img.onload=initialize;
+  img.onerror=()=>{
+    if(token!==displayToken||img.src!==photo.url)return;
+    $('stageWrap').style.visibility='visible';
+    alert('この画像を開けませんでした。iCloudからダウンロード済みか確認してください。');
+  };
+  if(img.src!==photo.url){img.src=photo.url;}
+  else if(img.complete&&img.naturalWidth){initialize();}
 }
+
 function openPhoto(i){
   if(!photos.length)return;
   showPhoto(i);
@@ -341,12 +389,13 @@ function draw(){
     Object.assign(copy.style,{width:w+'px',height:h+'px',left:-r.x*w+'px',top:-r.y*h+'px'});
     cell.append(copy);bright.append(cell);
   });
-  const buttons=$('cellButtons');buttons.replaceChildren();buttons.style.setProperty('--cols',cols);
+  const buttons=$('cellButtons');buttons.replaceChildren();buttons.style.setProperty('--cols',cols);buttons.style.pointerEvents=selectionMode?'auto':'none';
   for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
     const index=r*cols+c,b=document.createElement('button');b.type='button';b.setAttribute('aria-label',`行${r+1} 列${c+1}`);
     b.title=`${r+1}行 ${c+1}列`;
     b.style.background=selected.has(index)?'rgba(169,199,239,.07)':'transparent';
     b.addEventListener('click',()=>{
+      if(!selectionMode)return;
       if(selected.has(index))selected.delete(index);
       else selected.add(index);
       draw();
@@ -366,6 +415,7 @@ function draw(){
     });lines.append(el);
   }
   $('selectionCount').textContent=`${selected.size}マス選択中`;
+  updateSelectionMode();
   const completed=done.size,total=rows*cols;
   $('progressText').textContent=`${completed} / ${total} 完了`;
   $('progressBar').style.width=`${completed/total*100}%`;
@@ -469,6 +519,8 @@ $('deleteSelectedBtn').onclick=deleteSelectedPhotos;
 $('deleteAllBtn').onclick=deleteAllPhotos;
 
 $('backBtn').onclick=backToGallery;
+$('homeBtn').onclick=backToGallery;
+$('selectionModeBtn').onclick=()=>{selectionMode=!selectionMode;updateSelectionMode()};
 $('previousPhotoBtn').addEventListener('click',()=>navigatePhoto(current-1));
 $('nextPhotoBtn').addEventListener('click',()=>navigatePhoto(current+1));
 $('randomPhotoBtn').addEventListener('click',randomPhoto);
