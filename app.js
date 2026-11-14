@@ -3,30 +3,58 @@ let photos=[],current=0,rows=3,cols=3,xs=[],ys=[],selected=new Set(),done=new Se
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const even=n=>Array.from({length:n-1},(_,i)=>(i+1)/n);
 // Safari on macOS may return an empty or generic MIME type for local files.
-// Check the filename extension as a fallback instead of rejecting those files.
-const IMAGE_EXT=/\.(jpe?g|png|gif|webp|heic|heif|avif|tiff?|bmp)$/i;
-const isImage=f=>!!f && ((typeof f.type==='string' && f.type.toLowerCase().startsWith('image/')) || IMAGE_EXT.test(f.name||''));
-function addPhotos(list){
+// Use MIME type / extension as a first filter, then ask the browser to decode
+// the file as an image. This rejects non-image files renamed with .jpg, etc.
+const IMAGE_EXT=/\.(jpe?g|png|gif|webp|heic|heif|avif|svg|tiff?|bmp)$/i;
+const isImageCandidate=f=>!!f && ((typeof f.type==='string' && f.type.toLowerCase().startsWith('image/')) || IMAGE_EXT.test(f.name||''));
+async function canDecodeImage(file){
+  const url=URL.createObjectURL(file);
+  try{
+    const img=new Image();
+    img.src=url;
+    if(typeof img.decode==='function') await img.decode();
+    else await new Promise((resolve,reject)=>{
+      img.onload=resolve;
+      img.onerror=()=>reject(new Error('Not a decodable image'));
+    });
+    return img.naturalWidth>0 && img.naturalHeight>0;
+  }catch(err){
+    return false;
+  }finally{
+    URL.revokeObjectURL(url);
+  }
+}
+async function addPhotos(list){
   const all=Array.from(list||[]);
-  const files=all.filter(isImage);
-  if(!files.length){
-    alert('画像を読み込めませんでした。JPEG、PNG、HEICなどの画像ファイルを選んでください。');
+  if(!all.length)return;
+  const valid=[];
+  let rejected=0;
+  for(const file of all){
+    if(!isImageCandidate(file) || !(await canDecodeImage(file))){
+      rejected++;
+      continue;
+    }
+    valid.push(file);
+  }
+  if(!valid.length){
+    alert('画像ファイルとして読み込めるファイルがありませんでした。JPEG、PNG、HEICなどの画像を選んでください。');
     return;
   }
-  const added=[];
-  for(const file of files){
+  let added=0;
+  for(const file of valid){
     try{
       const url=URL.createObjectURL(file);
       photos.push({file,url,name:file.webkitRelativePath||file.name});
-      added.push(file.name);
+      added++;
     }catch(err){
+      rejected++;
       console.error('画像の読み込みに失敗:',file.name,err);
     }
   }
   renderGallery();
-  if(photos.length) $('emptyGallery').classList.add('hidden');
-  if(added.length!==files.length){
-    alert(`${added.length}枚を追加しました。${files.length-added.length}枚は読み込めませんでした。`);
+  if(photos.length)$('emptyGallery').classList.add('hidden');
+  if(rejected>0){
+    alert(`${added}枚の画像を追加しました。画像以外、または読み込めないファイル${rejected}個は除外しました。`);
   }
 }
 function renderGallery(){
