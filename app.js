@@ -1,7 +1,127 @@
 const $=id=>document.getElementById(id);
 let photos=[],current=0,rows=3,cols=3,xs=[],ys=[],selected=new Set(),done=new Set(),dim=.9;
+const DB_NAME='gridx-local-library',DB_VERSION=1,PHOTO_STORE='photos';
+let db=null,displayToken=0;
+
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const even=n=>Array.from({length:n-1},(_,i)=>(i+1)/n);
+
+function openLibrary(){
+  return new Promise((resolve,reject)=>{
+    if(!('indexedDB' in window)){reject(new Error('IndexedDB is not available'));return;}
+    const request=indexedDB.open(DB_NAME,DB_VERSION);
+    request.onupgradeneeded=()=>{
+      const database=request.result;
+      if(!database.objectStoreNames.contains(PHOTO_STORE)){
+        database.createObjectStore(PHOTO_STORE,{keyPath:'hash'});
+      }
+    };
+    request.onsuccess=()=>resolve(request.result);
+    request.onerror=()=>reject(request.error||new Error('Could not open local library'));
+  });
+}
+function transactionDone(tx){
+  return new Promise((resolve,reject)=>{
+    tx.oncomplete=()=>resolve();
+    tx.onerror=()=>reject(tx.error||new Error('Storage transaction failed'));
+    tx.onabort=()=>reject(tx.error||new Error('Storage transaction aborted'));
+  });
+}
+async function readSavedRecords(){
+  const tx=db.transaction(PHOTO_STORE,'readonly');
+  const finished=transactionDone(tx);
+  const records=await new Promise((resolve,reject)=>{
+    const request=tx.objectStore(PHOTO_STORE).getAll();
+    request.onsuccess=()=>resolve(request.result||[]);
+    request.onerror=()=>reject(request.error);
+  });
+  await finished;
+  return records;
+}
+async function writeSavedRecord(record){
+  if(!db)throw new Error('Local library is not available');
+  const tx=db.transaction(PHOTO_STORE,'readwrite');
+  tx.objectStore(PHOTO_STORE).put(record);
+  await transactionDone(tx);
+}
+async function removeSavedRecord(hash){
+  if(!db)return;
+  const tx=db.transaction(PHOTO_STORE,'readwrite');
+  tx.objectStore(PHOTO_STORE).delete(hash);
+  await transactionDone(tx);
+}
+async function hashFile(file){
+  if(window.crypto?.subtle){
+    const bytes=await file.arrayBuffer();
+    const digest=await crypto.subtle.digest('SHA-256',bytes);
+    return Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
+  }
+  // Conservative fallback for non-secure / older browser contexts.
+  return `fallback-${file.size}-${file.lastModified||0}-${file.name||''}`;
+}
+function validProgress(p){
+  if(!p||!Number.isInteger(p.rows)||!Number.isInteger(p.cols)||p.rows<1||p.rows>12||p.cols<1||p.cols>12)return false;
+  if(!Array.isArray(p.xs)||!Array.isArray(p.ys)||p.xs.length!==p.cols+1||p.ys.length!==p.rows+1)return false;
+  const validAxis=a=>a.every((v,i)=>Number.isFinite(v)&&v>=0&&v<=1&&(i===0||v>a[i-1]))&&a[0]===0&&a[a.length-1]===1;
+  return validAxis(p.xs)&&validAxis(p.ys);
+}
+function captureProgress(){
+  return {rows,cols,xs:[...xs],ys:[...ys],done:[...done],dim};
+}
+async function saveCurrentProgress(){
+  const photo=photos[current];
+  if(!photo||!photo.hash||!db)return;
+  photo.progress=captureProgress();
+  try{
+    await writeSavedRecord({
+      hash:photo.hash,blob:photo.file,name:photo.name,
+      addedAt:photo.addedAt||Date.now(),progress:photo.progress
+    });
+    photo.saved=true;
+    updateStorageInfo();
+  }catch(err){
+    photo.saved=false;
+    updateStorageInfo();
+    console.warn('練習状態の保存に失敗しました:',err);
+  }
+}
+function formatBytes(bytes){
+  if(bytes<1024)return `${bytes} B`;
+  if(bytes<1024*1024)return `${(bytes/1024).toFixed(1)} KB`;
+  return `${(bytes/1024/1024).toFixed(1)} MB`;
+}
+function updateStorageInfo(){
+  const saved=photos.filter(p=>p.saved);
+  const bytes=saved.reduce((sum,p)=>sum+(p.file?.size||0),0);
+  const info=$('storageInfo');
+  if(info)info.textContent=`端末内保存 ${saved.length}枚 · ${formatBytes(bytes)}`;
+}
+async function restoreLibrary(){
+  try{
+    db=await openLibrary();
+    const records=await readSavedRecords();
+    records.sort((a,b)=>(a.addedAt||0)-(b.addedAt||0));
+    for(const record of records){
+      if(!record.blob||!record.hash)continue;
+      const url=URL.createObjectURL(record.blob);
+      photos.push({
+        hash:record.hash,file:record.blob,url,name:record.name||'画像',
+        addedAt:record.addedAt||Date.now(),progress:record.progress||null,saved:true
+      });
+    }
+    renderGallery();
+    updateStorageInfo();
+    // Ask the browser to protect the local library from automatic eviction.
+    try{if(navigator.storage?.persist)await navigator.storage.persist();}catch(err){}
+  }catch(err){
+    console.warn('端末内ライブラリを利用できません:',err);
+    const info=$('storageInfo');
+    if(info)info.textContent='端末保存を利用できません（今回の起動中のみ）';
+    renderGallery();
+  }
+}
+const libraryReady=restoreLibrary();
+
 // Safari on macOS may return an empty or generic MIME type for local files.
 // Use MIME type / extension as a first filter, then ask the browser to decode
 // the file as an image. This rejects non-image files renamed with .jpg, etc.
@@ -25,26 +145,48 @@ async function canDecodeImage(file){
   }
 }
 async function addPhotos(list){
+  await libraryReady;
   const all=Array.from(list||[]);
   if(!all.length)return;
+  const seen=new Set(photos.map(p=>p.hash));
   const valid=[];
-  let rejected=0;
+  let rejected=0,duplicates=0;
   for(const file of all){
-    if(!isImageCandidate(file) || !(await canDecodeImage(file))){
+    try{
+      if(!isImageCandidate(file)){rejected++;continue;}
+      const hash=await hashFile(file);
+      if(seen.has(hash)){duplicates++;continue;}
+      if(!(await canDecodeImage(file))){rejected++;continue;}
+      seen.add(hash);
+      valid.push({file,hash});
+    }catch(err){
+      // An iCloud placeholder or unreadable file should not stop the rest.
       rejected++;
-      continue;
+      console.warn('このファイルをスキップしました:',file?.name,err);
     }
-    valid.push(file);
   }
-  if(!valid.length){
-    alert('画像ファイルとして読み込めるファイルがありませんでした。JPEG、PNG、HEICなどの画像を選んでください。');
-    return;
-  }
-  let added=0;
-  for(const file of valid){
+  let added=0,notSaved=0;
+  for(const item of valid){
+    const file=item.file;
     try{
       const url=URL.createObjectURL(file);
-      photos.push({file,url,name:file.webkitRelativePath||file.relativePath||file.name});
+      const photo={
+        hash:item.hash,file,url,
+        name:file.webkitRelativePath||file.relativePath||file.name,
+        addedAt:Date.now(),progress:null,saved:false
+      };
+      photos.push(photo);
+      try{
+        if(!db)throw new Error('端末保存を利用できません');
+        await writeSavedRecord({
+          hash:photo.hash,blob:photo.file,name:photo.name,
+          addedAt:photo.addedAt,progress:null
+        });
+        photo.saved=true;
+      }catch(err){
+        notSaved++;
+        console.warn('写真を端末に保存できませんでした:',file.name,err);
+      }
       added++;
     }catch(err){
       rejected++;
@@ -52,37 +194,67 @@ async function addPhotos(list){
     }
   }
   renderGallery();
+  updateStorageInfo();
   if(photos.length)$('emptyGallery').classList.add('hidden');
-  if(rejected>0){
-    alert(`${added}枚の画像を追加しました。画像以外、または読み込めないファイル${rejected}個は除外しました。`);
-  }
+  const messages=[];
+  if(added)messages.push(`${added}枚を追加`);
+  if(duplicates)messages.push(`${duplicates}枚は重複のためスキップ`);
+  if(rejected)messages.push(`${rejected}個は画像以外・未ダウンロード・読み込み不可のため除外`);
+  if(notSaved)messages.push(`${notSaved}枚は今回の起動中のみ利用可能（端末保存に失敗）`);
+  if(messages.length)alert(messages.join('。\n')+'。');
 }
 function renderGallery(){
   const root=$('galleryGrid');root.replaceChildren();
   photos.forEach((p,i)=>{
+    const wrap=document.createElement('div');wrap.className='photo-card-wrap';
     const b=document.createElement('button');b.className='photo-card';b.type='button';
     const im=document.createElement('img');im.src=p.url;im.alt=p.name;
     const label=document.createElement('span');label.textContent=p.name.split('/').pop();
-    b.append(im,label);b.addEventListener('click',()=>openPhoto(i));root.append(b);
+    const state=document.createElement('small');state.className='photo-state';state.textContent=p.saved?'端末に保存済み':'一時利用';
+    b.append(im,label,state);b.addEventListener('click',()=>openPhoto(i));
+    const remove=document.createElement('button');remove.className='photo-remove';remove.type='button';remove.textContent='削除';
+    remove.setAttribute('aria-label',`${label.textContent}を削除`);
+    remove.addEventListener('click',async e=>{
+      e.preventDefault();e.stopPropagation();
+      if(!confirm(`「${label.textContent}」をGridxの端末内ライブラリから削除しますか？`))return;
+      try{await removeSavedRecord(p.hash);}catch(err){alert('保存データを削除できませんでした。');return;}
+      URL.revokeObjectURL(p.url);
+      photos.splice(i,1);
+      renderGallery();updateStorageInfo();
+    });
+    wrap.append(b,remove);root.append(wrap);
   });
   $('photoCount').textContent=`${photos.length}枚`;
   $('emptyGallery').classList.toggle('hidden',photos.length>0);
   $('randomBtn').disabled=!photos.length;
+  updateStorageInfo();
 }
 function showPhoto(i){
   if(!photos.length)return;
   current=(i+photos.length)%photos.length;
+  const photo=photos[current],token=++displayToken;
   $('galleryScreen').classList.add('hidden');$('gridScreen').classList.remove('hidden');
-  $('currentName').textContent=photos[current].name.split('/').pop();
+  $('currentName').textContent=photo.name.split('/').pop();
   updatePhotoNavigation();
   const img=$('photo');
   img.onload=()=>{
-    const w=img.naturalWidth,h=img.naturalHeight,cell=Math.min(w,h)/3;
-    const c=Math.max(1,Math.ceil(w/cell)),r=Math.max(1,Math.ceil(h/cell));
-    setGrid(c,r);
+    if(token!==displayToken)return;
+    selected=new Set();
+    if(validProgress(photo.progress)){
+      rows=photo.progress.rows;cols=photo.progress.cols;
+      xs=[...photo.progress.xs];ys=[...photo.progress.ys];
+      done=new Set((photo.progress.done||[]).filter(n=>Number.isInteger(n)&&n>=0&&n<rows*cols));
+      dim=Number.isFinite(photo.progress.dim)?clamp(photo.progress.dim,.7,.9):.9;
+      $('cols').value=cols;$('rows').value=rows;
+      draw();
+    }else{
+      const w=img.naturalWidth,h=img.naturalHeight,cell=Math.min(w,h)/3;
+      const c=Math.max(1,Math.ceil(w/cell)),r=Math.max(1,Math.ceil(h/cell));
+      setGrid(c,r);
+    }
   };
-  img.onerror=()=>alert('この画像を開けませんでした。別の写真を選んでください。');
-  img.src=photos[current].url;
+  img.onerror=()=>alert('この画像を開けませんでした。iCloudからダウンロード済みか確認してください。');
+  img.src=photo.url;
 }
 function openPhoto(i){
   if(!photos.length)return;
@@ -113,7 +285,7 @@ function setGrid(c,r){
   cols=clamp(c,1,12);rows=clamp(r,1,12);
   xs=[0,...even(cols),1];ys=[0,...even(rows),1];
   selected=new Set();done.clear();
-  $('cols').value=cols;$('rows').value=rows;draw();
+  $('cols').value=cols;$('rows').value=rows;draw();saveCurrentProgress();
 }
 function draw(){
   const img=$('photo');if(!img.complete||!img.naturalWidth)return;
@@ -148,7 +320,7 @@ function draw(){
     el.addEventListener('pointerdown',ev=>{
       ev.preventDefault();const arr=axis==='v'?xs:ys,box=stage.getBoundingClientRect();
       const move=e=>{const val=axis==='v'?(e.clientX-box.left)/box.width:(e.clientY-box.top)/box.height;arr[index]=clamp(val,arr[index-1]+.025,arr[index+1]-.025);draw()};
-      const up=()=>{window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up)};
+      const up=()=>{window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);saveCurrentProgress()};
       window.addEventListener('pointermove',move);window.addEventListener('pointerup',up);
     });lines.append(el);
   }
@@ -181,13 +353,17 @@ function readDirectoryEntry(entry,path){
     const readBatch=()=>{
       reader.readEntries(async entries=>{
         if(!entries.length){resolve(files);return;}
-        try{
-          for(const child of entries){
+        for(const child of entries){
+          try{
             const found=await readEntry(child,path+entry.name+'/');
             files.push(...found);
+          }catch(err){
+            // One unavailable iCloud placeholder or unreadable file must not
+            // abort importing the remaining files from this folder.
+            console.warn('フォルダー内の項目をスキップしました:',child.name,err);
           }
-          readBatch();
-        }catch(err){reject(err);}
+        }
+        readBatch();
       },reject);
     };
     readBatch();
@@ -250,9 +426,9 @@ $('randomPhotoBtn').addEventListener('click',randomPhoto);
 $('selectOne').onclick=()=>{selected=new Set([selected.values().next().value??0]);draw()};
 $('applyGrid').onclick=()=>setGrid(+$('cols').value||4,+$('rows').value||4);
 document.querySelectorAll('[data-preset]').forEach(b=>b.onclick=()=>setGrid(+b.dataset.preset,+b.dataset.preset));
-document.querySelectorAll('[data-dim]').forEach(b=>b.onclick=()=>{dim=1-(+b.dataset.dim/100);draw()});
-$('markDone').onclick=()=>{selected.forEach(i=>done.add(i));draw()};
-$('clearDone').onclick=()=>{done.clear();draw()};
+document.querySelectorAll('[data-dim]').forEach(b=>b.onclick=()=>{dim=1-(+b.dataset.dim/100);draw();saveCurrentProgress()});
+$('markDone').onclick=()=>{selected.forEach(i=>done.add(i));draw();saveCurrentProgress()};
+$('clearDone').onclick=()=>{done.clear();draw();saveCurrentProgress()};
 
 // Finder drag-and-drop into the gallery.
 const dropZone=$('dropZone');
