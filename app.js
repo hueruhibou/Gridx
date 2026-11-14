@@ -2,13 +2,32 @@ const $=id=>document.getElementById(id);
 let photos=[],current=0,rows=4,cols=4,xs=[],ys=[],selected=new Set([0]),done=new Set(),dim=.8;
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const even=n=>Array.from({length:n-1},(_,i)=>(i+1)/n);
-const isImage=f=>f&&f.type&&f.type.startsWith('image/');
+// Safari on macOS may return an empty or generic MIME type for local files.
+// Check the filename extension as a fallback instead of rejecting those files.
+const IMAGE_EXT=/\\.(jpe?g|png|gif|webp|heic|heif|avif|tiff?|bmp)$/i;
+const isImage=f=>!!f && ((typeof f.type==='string' && f.type.toLowerCase().startsWith('image/')) || IMAGE_EXT.test(f.name||''));
 function addPhotos(list){
-  const files=Array.from(list||[]).filter(isImage);
-  if(!files.length)return;
-  files.forEach(file=>photos.push({file,url:URL.createObjectURL(file),name:file.webkitRelativePath||file.name}));
+  const all=Array.from(list||[]);
+  const files=all.filter(isImage);
+  if(!files.length){
+    alert('画像を読み込めませんでした。JPEG、PNG、HEICなどの画像ファイルを選んでください。');
+    return;
+  }
+  const added=[];
+  for(const file of files){
+    try{
+      const url=URL.createObjectURL(file);
+      photos.push({file,url,name:file.webkitRelativePath||file.name});
+      added.push(file.name);
+    }catch(err){
+      console.error('画像の読み込みに失敗:',file.name,err);
+    }
+  }
   renderGallery();
-  if(photos.length===files.length) $('emptyGallery').classList.add('hidden');
+  if(photos.length) $('emptyGallery').classList.add('hidden');
+  if(added.length!==files.length){
+    alert(`${added.length}枚を追加しました。${files.length-added.length}枚は読み込めませんでした。`);
+  }
 }
 function renderGallery(){
   const root=$('galleryGrid');root.replaceChildren();
